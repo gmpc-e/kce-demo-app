@@ -1,0 +1,8 @@
+<resources>
+  <string name="app_name">KCE Demo</string>
+  <string name="choose_city">בחר עיר</string>
+  <string name="choose_profile">בחר לוח/פרופיל</string>
+  <string name="prev">אתמול</string>
+  <string name="today">היום</string>
+  <string name="next">מחר</string>
+</resources>
