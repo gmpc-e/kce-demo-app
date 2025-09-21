@@ -1,0 +1,12 @@
+{
+  "profiles": [
+    {
+      "key": "or-hachaim",
+      "displayName": "Sfaradi – Or HaChaim"
+    },
+    {
+      "key": "hazon-shamaim",
+      "displayName": "Hazon Shamaim"
+    }
+  ]
+}

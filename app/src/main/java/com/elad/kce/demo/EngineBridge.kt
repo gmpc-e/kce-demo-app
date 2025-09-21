@@ -1,89 +1,121 @@
 package com.elad.kce.demo
 
+import android.app.Application
+import android.util.Log
+import com.elad.halacha.engine.profiles.ProfilesServiceImpl
 import com.elad.halacha.profiles.api.GeoInput
 import com.elad.halacha.profiles.api.ProfileComputeInput
+import com.elad.halacha.profiles.api.ProfileComputeResponse
 import com.elad.halacha.profiles.api.ProfilesService
-import java.time.OffsetDateTime
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
+import org.json.JSONObject
+import java.io.BufferedReader
+import java.io.InputStreamReader
 import java.time.LocalDate
-import java.time.LocalTime
+import java.time.OffsetDateTime
+import java.time.ZonedDateTime
 
 /**
- * Thin adapter to the new ProfilesService API for the demo app.
- * - Lists profiles (key + display name [Hebrew preferred]).
- * - Computes a selected profile for given date/geo.
- * - Maps response items -> (Hebrew label, HH:mm rounded).
+ * Bridge to the engine ProfilesService with Android-safe fallback for listing profiles.
+ * City / UiProfile / ZmanItem are defined in Models.kt (do NOT redeclare them).
  */
 object EngineBridge {
+  private const val TAG = "EngineBridge"
 
-  data class UiProfile(val key: String, val displayName: String)
+  private var app: Application? = null
+  private val svc: ProfilesService by lazy { ProfilesServiceImpl() }
 
-  private val svc: ProfilesService
-    get() = EngineServices.profilesService
-
-  private val ISO_DT: DateTimeFormatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME
-
-  /** 1) List profiles for the picker. */
-  fun listProfiles(): List<UiProfile> {
-    val entries = svc.listProfiles()
-    return entries
-      .map { e ->
-        val display = (e.labels?.he ?: e.displayName).ifBlank { e.key }
-        UiProfile(key = e.key, displayName = display)
-      }
-      .sortedBy { it.displayName }
+  /** Call this once from MainActivity.onCreate() */
+  fun init(appContext: Application) {
+    app = appContext
+    Log.i(TAG, "init(): EngineBridge initialized")
   }
 
-  /** 2) Compute a selected profile and adapt to UI list. */
-  fun computeProfile(
-    profileKey: String,
-    date: LocalDate,
-    lat: Double,
-    lon: Double,
-    elev: Double,
-    tz: String
-  ): ComputeResultDemo {
+  /**
+   * List boards from engine. On Android, directory listing inside AAR often fails and returns [].
+   * Fallback: read app/src/main/assets/profiles_index.json (keys + display names).
+   */
+  fun listProfiles(): List<UiProfile> {
+    return try {
+      val engine = svc.listProfiles()
+      Log.i(TAG, "listProfiles(): engine returned ${engine.size} items")
+      engine.forEachIndexed { i, p ->
+        Log.i(TAG, "engine[$i]: key='${p.key}', displayName='${p.displayName}'")
+      }
+      if (engine.isNotEmpty()) {
+        engine.map { UiProfile(key = it.key, displayName = it.displayName) }
+      } else {
+        // Fallback to assets index
+        val fromAssets = loadProfilesFromAssets()
+        Log.w(TAG, "listProfiles(): using assets fallback -> ${fromAssets.size} items")
+        fromAssets
+      }
+    } catch (t: Throwable) {
+      Log.e(TAG, "listProfiles() failed, falling back to assets", t)
+      loadProfilesFromAssets()
+    }
+  }
 
+  /**
+   * Compute a selected board for date + city. Engine loads the profile JSON by key (that part
+   * usually works on Android); listing is the part that fails.
+   */
+  fun computeProfile(
+    key: String,
+    date: LocalDate,
+    city: City,
+    tz: String = "Asia/Jerusalem"
+  ): Result<List<ZmanItem>> = runCatching {
     val input = ProfileComputeInput(
       dateIso = date.toString(),
-      geo = GeoInput(lat = lat, lon = lon, elev = elev, tz = tz)
+      geo = GeoInput(lat = city.lat, lon = city.lon, elev = city.elev ?: 0.0, tz = tz)
     )
 
-    val res = svc.computeProfile(profileKey, input)
+    Log.i(TAG, "computeProfile(): key=$key date=${input.dateIso} city=${city.name} tz=$tz")
+    val resp: ProfileComputeResponse = svc.computeProfile(key, input)
+    Log.i(TAG, "computeProfile(): results=${resp.results.size}, warnings=${resp.warnings.size}")
 
-    val zone = ZoneId.of(tz)
-
-    val items: List<ZmanItem> = res.results.mapNotNull { r ->
-      val labelHe = r.label?.he ?: r.label?.en ?: r.id
-
-      // Avoid smart-cast: stash local/instant into locals and check
-      val localStr: String? = r.local
-      val instStr: String? = r.instant
-
-      val localTime: LocalTime? = when {
-        !localStr.isNullOrBlank() -> {
-          // Strip optional zone suffix like "[Asia/Jerusalem]" if present
-          val cleaned = localStr.replace(Regex("\\[.*\\]\$"), "")
-          OffsetDateTime.parse(cleaned, ISO_DT).toLocalTime()
-        }
-        !instStr.isNullOrBlank() -> {
-          java.time.Instant.parse(instStr).atZone(zone).toLocalTime()
-        }
-        else -> null
-      }?.roundNoSecondsUp30()
-
-      localTime?.let { ZmanItem(labelHe = labelHe, time = it) }
+    resp.warnings.forEachIndexed { i, w ->
+      Log.w(TAG, "warn[$i] path=${w.path} code=${w.code} msg=${w.message}")
     }
 
-    val header = res.profile.labels?.he
-      ?: res.profile.displayName.ifBlank { res.profile.key }
+    val items = resp.results.mapNotNull { r ->
+      val he = r.label?.he ?: r.label?.en ?: r.id
+      val localIso = r.local ?: return@mapNotNull null
+      val localTime = parseLocalTime(localIso) ?: return@mapNotNull null
 
-    return ComputeResultDemo(
-      profileName = header,
-      locationName = "",            // filled by caller with city name
-      date = LocalDate.parse(input.dateIso),
-      times = items
-    )
+      Log.i(TAG, "res id=${r.id}, label='$he', local=$localIso, kind=${r.resolution.kind}, status=${r.resolution.status}")
+      ZmanItem(labelHe = he, time = localTime)
+    }
+    items
+  }
+
+  // ——— helpers ———
+
+  private fun loadProfilesFromAssets(): List<UiProfile> {
+    val a = app ?: return emptyList()
+    return try {
+      a.assets.open("profiles_index.json").use { ins ->
+        val text = BufferedReader(InputStreamReader(ins)).readText()
+        val root = JSONObject(text)
+        val arr = root.optJSONArray("profiles") ?: return emptyList()
+        buildList {
+          for (i in 0 until arr.length()) {
+            val obj = arr.getJSONObject(i)
+            val key = obj.getString("key")
+            val display = obj.optString("displayName", key)
+            add(UiProfile(key = key, displayName = display))
+          }
+        }
+      }
+    } catch (t: Throwable) {
+      Log.e(TAG, "loadProfilesFromAssets() failed", t)
+      emptyList()
+    }
+  }
+
+  private fun parseLocalTime(iso: String) = try {
+    OffsetDateTime.parse(iso).toLocalTime()
+  } catch (_: Throwable) {
+    try { ZonedDateTime.parse(iso).toLocalTime() } catch (_: Throwable) { null }
   }
 }

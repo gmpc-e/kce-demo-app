@@ -1,99 +1,160 @@
 package com.elad.kce.demo
 
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import android.app.Application
+import android.util.Log
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.AndroidViewModel
+import org.json.JSONArray
 import java.time.LocalDate
 
+/**
+ * Keep ONLY UiState here.
+ * (City / UiProfile / ZmanItem live in Models.kt)
+ */
 data class UiState(
-  val cities: List<City> = emptyList(),
-  val profiles: List<EngineBridge.UiProfile> = emptyList(),
-  val selectedCityIdx: Int = 0,
-  val selectedProfileIdx: Int = 0,
   val date: LocalDate = LocalDate.now(),
+  val cities: List<City> = emptyList(),
+  val selectedCityIdx: Int = 0,
+  val profiles: List<UiProfile> = emptyList(),
+  val selectedProfileIdx: Int = 0,
   val loading: Boolean = false,
-  val result: ComputeResultDemo? = null,
-  val error: String? = null
+  val error: String? = null,
+  val result: List<ZmanItem> = emptyList()
 )
 
-class MainViewModel : ViewModel() {
+class MainViewModel(app: Application) : AndroidViewModel(app) {
 
-  private val _state = androidx.compose.runtime.mutableStateOf(UiState())
-  val state: androidx.compose.runtime.State<UiState> get() = _state
+  private val TAG = "MainViewModel"
+
+  var state by mutableStateOf(UiState())
+    private set
 
   init {
-    // Initial cities (can be replaced later with geolocation)
-    val initialCities = listOf(
-      City("הוד השרון", 32.1556, 34.8892, 40.0, "Asia/Jerusalem"),
-      City("ירושלים", 31.7683, 35.2137, 754.0, "Asia/Jerusalem"),
-      City("חיפה", 32.7940, 34.9896, 10.0, "Asia/Jerusalem"),
-      City("אילת", 29.5577, 34.9519, 10.0, "Asia/Jerusalem")
+    // 1) Load cities from assets
+    val loadedCities = loadCitiesFromAssets()
+    state = state.copy(
+      cities = loadedCities,
+      selectedCityIdx = if (loadedCities.isNotEmpty()) 0 else -1
     )
-    _state.value = _state.value.copy(cities = initialCities)
+    Log.i(TAG, "Loaded ${loadedCities.size} cities from assets")
+
+    // 2) Load boards from engine on start
     refreshProfiles()
   }
 
+  // ---------- Top controls actions ----------
+
   fun prevDay() {
-    _state.value = _state.value.copy(date = _state.value.date.minusDays(1))
-    compute()
+    state = state.copy(date = state.date.minusDays(1))
+    computeIfPossible()
   }
-  fun nextDay() {
-    _state.value = _state.value.copy(date = _state.value.date.plusDays(1))
-    compute()
-  }
+
   fun today() {
-    _state.value = _state.value.copy(date = LocalDate.now())
-    compute()
+    state = state.copy(date = LocalDate.now())
+    computeIfPossible()
   }
 
-  fun selectCity(index: Int) {
-    _state.value = _state.value.copy(selectedCityIdx = index)
-    compute()
+  fun nextDay() {
+    state = state.copy(date = state.date.plusDays(1))
+    computeIfPossible()
   }
 
-  fun selectProfile(index: Int) {
-    _state.value = _state.value.copy(selectedProfileIdx = index)
-    compute()
+  fun selectCity(idx: Int) {
+    state = state.copy(selectedCityIdx = idx)
+    computeIfPossible()
   }
+
+  fun selectProfile(idx: Int) {
+    state = state.copy(selectedProfileIdx = idx)
+    computeIfPossible()
+  }
+
+  // ---------- Data loading ----------
 
   fun refreshProfiles() {
-    viewModelScope.launch(Dispatchers.IO) {
-      try {
-        _state.value = _state.value.copy(loading = true, error = null)
-        val profiles = EngineBridge.listProfiles()
-        val sel = profiles.indexOfFirst { it.key.contains("or-hachaim") }.takeIf { it >= 0 } ?: 0
-        _state.value = _state.value.copy(
-          profiles = profiles,
-          selectedProfileIdx = if (profiles.isNotEmpty()) sel else 0,
-          loading = false
-        )
-        compute()
-      } catch (e: Exception) {
-        _state.value = _state.value.copy(loading = false, error = e.message ?: "Error loading profiles")
+    runCatching {
+      val profiles = EngineBridge.listProfiles()
+      Log.i(TAG, "EngineBridge.listProfiles() -> ${profiles.size} items")
+      state = state.copy(
+        profiles = profiles,
+        selectedProfileIdx = if (profiles.isNotEmpty()) 0 else -1
+      )
+    }.onFailure { t ->
+      Log.e(TAG, "Failed to load profiles from engine", t)
+      state = state.copy(profiles = emptyList(), selectedProfileIdx = -1, error = t.message)
+    }
+
+    // Try to compute immediately if we have both city + profile
+    computeIfPossible()
+  }
+
+  private fun loadCitiesFromAssets(): List<City> {
+    return try {
+      val json = getApplication<Application>()
+        .assets
+        .open("cities.json")
+        .bufferedReader()
+        .use { it.readText() }
+
+      val arr = JSONArray(json)
+      val out = ArrayList<City>(arr.length())
+      for (i in 0 until arr.length()) {
+        val o = arr.getJSONObject(i)
+        val name = o.optString("name", "")
+        val lat = o.optDouble("lat", Double.NaN)
+        val lon = o.optDouble("lon", Double.NaN)
+        val elev = o.optDouble("elev", 0.0)
+        // tz is optional in file; we ignore it because City in Models.kt has no tz field
+
+        if (name.isNotBlank() && !lat.isNaN() && !lon.isNaN()) {
+          out.add(City(name = name, lat = lat, lon = lon, elev = elev))
+        }
       }
+      out
+    } catch (t: Throwable) {
+      Log.e(TAG, "Failed to load assets/cities.json", t)
+      emptyList()
     }
   }
 
-  fun compute() {
-    viewModelScope.launch(Dispatchers.IO) {
-      val s = _state.value
-      if (s.cities.isEmpty() || s.profiles.isEmpty()) return@launch
-      _state.value = s.copy(loading = true, error = null)
-      try {
-        val city = s.cities[s.selectedCityIdx]
-        val profile = s.profiles[s.selectedProfileIdx]
+  // ---------- Compute ----------
 
-        val res = EngineBridge.computeProfile(
-          profileKey = profile.key,
-          date = s.date,
-          lat = city.lat, lon = city.lon, elev = city.elev, tz = city.tz
-        ).copy(locationName = city.name, date = s.date)
+  private fun computeIfPossible() {
+    val profile = state.profiles.getOrNull(state.selectedProfileIdx)
+    val city = state.cities.getOrNull(state.selectedCityIdx)
 
-        _state.value = _state.value.copy(loading = false, result = res)
-      } catch (e: Exception) {
-        _state.value = _state.value.copy(loading = false, error = e.message ?: "Error computing")
-      }
+    if (profile == null) {
+      Log.w(TAG, "computeIfPossible: no profile selected yet")
+      return
     }
+    if (city == null) {
+      Log.w(TAG, "computeIfPossible: no city selected yet")
+      return
+    }
+
+    state = state.copy(loading = true, error = null)
+    Log.i(
+      TAG,
+      "computeProfile -> key=${profile.key}, date=${state.date}, city=${city.name} (${city.lat},${city.lon}, elev=${city.elev})"
+    )
+
+    val res = EngineBridge.computeProfile(
+      key = profile.key,
+      date = state.date,
+      city = city
+    )
+
+    state = res.fold(
+      onSuccess = { list ->
+        Log.i(TAG, "computeProfile SUCCESS: received ${list.size} items")
+        state.copy(loading = false, result = list, error = null)
+      },
+      onFailure = { t ->
+        Log.e(TAG, "computeProfile ERROR", t)
+        state.copy(loading = false, error = t.message ?: "שגיאה", result = emptyList())
+      }
+    )
   }
 }
