@@ -21,33 +21,39 @@ android {
     targetCompatibility = JavaVersion.VERSION_17
   }
   kotlinOptions {
+    // keep Kotlin bytecode on 17 too
     jvmTarget = "17"
     freeCompilerArgs += listOf(
       "-Xjvm-default=all",
       "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api",
     )
   }
+  // toolchain pin (newer Gradle/Kotlin best practice)
   kotlin {
     jvmToolchain(17)
   }
 
   buildFeatures { compose = true }
-
-  // Compose Compiler 1.5.14 ↔ Kotlin 1.9.24 (compatible pair)
   composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
 
   packaging {
+    // avoid duplicate META-INF or licenses if they pop up
     resources {
-      excludes += setOf("META-INF/AL2.0", "META-INF/LGPL2.1")
+      excludes += setOf(
+        "META-INF/AL2.0",
+        "META-INF/LGPL2.1",
+      )
     }
   }
 }
 
 dependencies {
-  // Engine (published to mavenLocal)
+  // engine from mavenLocal()
   implementation("com.elad.halacha:core-engine:0.1.1-SNAPSHOT")
   implementation("com.elad.halacha:profiles:0.1.1-SNAPSHOT")
-  implementation("com.kosherjava:zmanim:2.5.0")
+  implementation("com.kosherjava:zmanim:2.6.0")
+
+
 
   // Compose
   implementation(platform("androidx.compose:compose-bom:2024.09.01"))
@@ -60,7 +66,12 @@ dependencies {
   implementation("androidx.activity:activity-compose:1.9.2")
   implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
   implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.4")
+
+
 }
+
+fun org.gradle.api.Project.tryProp(name: String): Any? =
+  runCatching { findProperty(name) }.getOrNull()
 
 // print resolved engine coords on every build
 tasks.register("printEngineVersions") {

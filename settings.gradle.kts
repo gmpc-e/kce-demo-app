@@ -1,28 +1,25 @@
-// settings.gradle.kts (root)
+// settings.gradle.kts
 
 pluginManagement {
   repositories {
+    gradlePluginPortal()
     google()
     mavenCentral()
-    gradlePluginPortal()
-    mavenLocal() // allow AGP/Kotlin plugins from local if ever needed
+    mavenLocal()
   }
 }
 
 dependencyResolutionManagement {
   repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
   repositories {
-    mavenLocal()   // <-- consume engine artifacts from here
+    mavenLocal()   // consume your :core-engine / :profiles SNAPSHOTs
     google()
-    mavenCentral()
+    mavenCentral() // resolve transitive deps (if any) from Central
   }
 }
 
 rootProject.name = "kce-demo-app"
-
-// Only the Android app lives in this build.
 include(":app")
 
-// (Optional alternative to mavenLocal: composite build of the engine repo)
-// If you prefer composite (no publish step), uncomment:
+// (Optional) Composite build instead of mavenLocal()
 // includeBuild("/Users/elkes/AndroidStudioProjects/kosherjava-compute-engine")

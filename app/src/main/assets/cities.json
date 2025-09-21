@@ -15,7 +15,7 @@
   },
   {
     "name": "חיפה",
-    "lat": 32.794,
+    "lat": 32.7940,
     "lon": 34.9896,
     "elev": 10,
     "tz": "Asia/Jerusalem"
@@ -25,6 +25,41 @@
     "lat": 29.5577,
     "lon": 34.9519,
     "elev": 10,
+    "tz": "Asia/Jerusalem"
+  },
+  {
+    "name": "פתח תקווה",
+    "lat": 32.0853,
+    "lon": 34.8876,
+    "elev": 30,
+    "tz": "Asia/Jerusalem"
+  },
+  {
+    "name": "כפר סבא",
+    "lat": 32.1850,
+    "lon": 34.9070,
+    "elev": 45,
+    "tz": "Asia/Jerusalem"
+  },
+  {
+    "name": "הרצליה",
+    "lat": 32.1663,
+    "lon": 34.8436,
+    "elev": 20,
+    "tz": "Asia/Jerusalem"
+  },
+  {
+    "name": "נתניה",
+    "lat": 32.3215,
+    "lon": 34.8532,
+    "elev": 35,
+    "tz": "Asia/Jerusalem"
+  },
+  {
+    "name": "ראשון לציון",
+    "lat": 31.9730,
+    "lon": 34.7925,
+    "elev": 40,
     "tz": "Asia/Jerusalem"
   }
 ]
