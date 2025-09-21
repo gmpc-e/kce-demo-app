@@ -1,0 +1,27 @@
+# Android/Gradle
+.gradle/
+build/
+**/build/
+local.properties
+.gradle/
+captures/
+.externalNativeBuild/
+*.apk
+*.ap_
+*.aab
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+
+# OS
+.DS_Store
+
+# Virtual env
+.venv/
+
+# Logs
+*.log
+
+# Misc
+.ktslint/

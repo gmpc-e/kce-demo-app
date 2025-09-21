@@ -2,6 +2,7 @@ plugins {
   id("com.android.application")
   kotlin("android")
   kotlin("plugin.serialization")
+  kotlin("plugin.compose")
 }
 
 android {
@@ -56,6 +57,8 @@ dependencies {
   implementation("androidx.compose.ui:ui-tooling-preview")
   debugImplementation("androidx.compose.ui:ui-tooling")
   implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.4")
+  implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.4")
+  implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.4")
 
   // KotlinX Serialization
   implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
@@ -64,6 +67,6 @@ dependencies {
   coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.2")
 
   // Depend on the engine modules via included build:
-  implementation(project(":core-engine"))
-  implementation(project(":profiles"))
+  implementation("com.elad.halacha:profiles:0.1.1-SNAPSHOT")
+  implementation("com.elad.halacha:core-engine:0.1.1-SNAPSHOT")
 }
