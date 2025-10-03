@@ -30,6 +30,9 @@ import com.kosherjava.zmanim.hebrewcalendar.HebrewDateFormatter
 import com.kosherjava.zmanim.hebrewcalendar.JewishCalendar
 import java.time.LocalDate
 import java.util.GregorianCalendar
+import androidx.compose.runtime.*
+import com.elad.kce.demo.banner.Banner
+import com.elad.kce.demo.banner.BannerViewModel
 
 class MainActivity : ComponentActivity() {
   private val vm: MainViewModel by viewModels()
