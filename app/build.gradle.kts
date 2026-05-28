@@ -45,8 +45,8 @@ android {
 
 dependencies {
   // Engine (published to mavenLocal)
-  implementation("com.elad.halacha:core-engine:0.1.1-SNAPSHOT")
-  implementation("com.elad.halacha:profiles:0.1.1-SNAPSHOT")
+  implementation("com.elad.halacha:core-engine:0.1.2-SNAPSHOT")
+  implementation("com.elad.halacha:profiles:0.1.2-SNAPSHOT")
   implementation("com.kosherjava:zmanim:2.5.0")
 
   // Compose
