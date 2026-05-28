@@ -6,7 +6,9 @@ data class City(
   val name: String,
   val lat: Double,
   val lon: Double,
-  val elev: Double? = null
+  val elev: Double? = null,
+  val candleMinutes: Int = 30,
+  val tz: String = "Asia/Jerusalem"
 )
 
 data class UiProfile(
@@ -16,5 +18,6 @@ data class UiProfile(
 
 data class ZmanItem(
   val labelHe: String,
-  val time: LocalTime
+  val time: LocalTime,
+  val bold: Boolean = false
 )

@@ -22,7 +22,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.elad.kce.demo.City
 import com.elad.kce.demo.UiProfile
-import java.time.LocalDate
 
 /**
  * Simple, clean, RTL:
@@ -33,7 +32,6 @@ import java.time.LocalDate
  */
 @Composable
 fun TopSection(
-    date: LocalDate,
     profiles: List<UiProfile>,
     selectedProfileIdx: Int,
     onSelectProfile: (Int) -> Unit,

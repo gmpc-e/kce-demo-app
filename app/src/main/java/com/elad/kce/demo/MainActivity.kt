@@ -14,8 +14,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -26,132 +24,96 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.elad.kce.demo.ui.components.TopSection
 import com.elad.kce.demo.ui.theme.KceTheme
-import com.kosherjava.zmanim.hebrewcalendar.HebrewDateFormatter
-import com.kosherjava.zmanim.hebrewcalendar.JewishCalendar
-import java.time.LocalDate
-import java.util.GregorianCalendar
-import androidx.compose.runtime.*
-import com.elad.kce.demo.banner.Banner
-import com.elad.kce.demo.banner.BannerViewModel
 
 class MainActivity : ComponentActivity() {
-  private val vm: MainViewModel by viewModels()
+    private val vm: MainViewModel by viewModels()
 
-  override fun onCreate(savedInstanceState: Bundle?) {
-    super.onCreate(savedInstanceState)
-    setContent {
-      CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-        KceTheme { AppScreen(vm) }
-      }
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                KceTheme { AppScreen(vm = vm) }
+            }
+        }
     }
-  }
 }
 
 @Composable
 fun AppScreen(vm: MainViewModel) {
-  val state = remember { derivedStateOf { vm.state } }
+    val state = vm.state
 
-  Scaffold(containerColor = Color(0xFFF5F5F5)) { padding ->
-    LazyColumn(
-      modifier = Modifier
-        .padding(padding)
-        .fillMaxSize(),
-      contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-      verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-      // Top: title, city & board (right-aligned), header + compact day chips
-      item {
-        TopSection(
-          date = state.value.date,
-          profiles = state.value.profiles,
-          selectedProfileIdx = state.value.selectedProfileIdx,
-          onSelectProfile = vm::selectProfile,
-          cities = state.value.cities,
-          selectedCityIdx = state.value.selectedCityIdx,
-          onSelectCity = vm::selectCity,
-          onPrev = vm::prevDay,
-          onToday = vm::today,
-          onNext = vm::nextDay,
-          hebrewHeader = hebrewHeaderLine(state.value.date) // <-- computed here
-        )
-      }
+    Scaffold(containerColor = Color(0xFFF5F5F5)) { padding ->
+        LazyColumn(
+            modifier = Modifier.padding(padding).fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            item {
+                TopSection(
+                    profiles = state.profiles,
+                    selectedProfileIdx = state.selectedProfileIdx,
+                    onSelectProfile = vm::selectProfile,
+                    cities = state.cities,
+                    selectedCityIdx = state.selectedCityIdx,
+                    onSelectCity = vm::selectCity,
+                    onPrev = vm::prevDay,
+                    onToday = vm::today,
+                    onNext = vm::nextDay,
+                    hebrewHeader = state.hebrewHeader
+                )
+            }
 
-      // Results / Loading / Error — keep clean & simple
-      when {
-        state.value.loading -> {
-          item {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-              CircularProgressIndicator()
+            when {
+                state.loading -> item {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                        CircularProgressIndicator()
+                    }
+                }
+                state.error != null -> item { ErrorCard(state.error) }
+                state.result.isNotEmpty() -> items(state.result) { item ->
+                    val weight = if (item.bold) FontWeight.ExtraBold else FontWeight.Normal
+                    val labelColor = if (item.bold) Color(0xFF1565C0) else Color(0xFF212121)
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = item.labelHe,
+                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = weight),
+                            color = labelColor,
+                            textAlign = TextAlign.Right
+                        )
+                        Text(
+                            text = "%02d:%02d".format(item.time.hour, item.time.minute),
+                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                            color = if (item.bold) Color(0xFF1565C0) else Color(0xFF000000)
+                        )
+                    }
+                }
+                else -> item { PlaceholderCard() }
             }
-          }
         }
-        state.value.error != null -> {
-          item { ErrorCard(state.value.error!!) }
-        }
-        state.value.result.isNotEmpty() -> {
-          items(state.value.result) { it ->
-            Row(
-              modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 6.dp),
-              horizontalArrangement = Arrangement.SpaceBetween,
-              verticalAlignment = Alignment.CenterVertically
-            ) {
-              Text(
-                text = it.labelHe, // right
-                style = MaterialTheme.typography.bodySmall,
-                color = Color(0xFF212121),
-                textAlign = TextAlign.Right
-              )
-              Text(
-                text = "%02d:%02d".format(it.time.hour, it.time.minute), // left
-                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
-                color = Color(0xFF000000)
-              )
-            }
-          }
-        }
-        else -> {
-          item { PlaceholderCard() }
-        }
-      }
     }
-  }
-}
-
-/** Example: "זמנים ליום ראשון כ״ח אלול תשפ״ה" using KosherJava (no ICU, no manual maps). */
-/** Example: "זמנים ליום ראשון כ״ח אלול תשפ״ה" */
-private fun hebrewHeaderLine(date: LocalDate): String {
-  val cal = GregorianCalendar(
-    date.year,
-    date.monthValue - 1, // <-- 0-based month for GregorianCalendar
-    date.dayOfMonth
-  )
-  val jc = JewishCalendar(cal).apply { setInIsrael(true) }
-  val hdf = HebrewDateFormatter().apply { isHebrewFormat = true }
-
-  val dow  = hdf.formatDayOfWeek(jc) // ראשון
-  val full = hdf.format(jc)          // כ״ח אלול תשפ״ה
-  return "זמנים ליום $dow $full"
 }
 
 @Composable
 private fun ErrorCard(msg: String) {
-  ElevatedCard(Modifier.fillMaxWidth()) {
-    Column(Modifier.padding(16.dp)) {
-      Text("שגיאה", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.error)
-      Spacer(Modifier.height(6.dp))
-      Text(msg, style = MaterialTheme.typography.bodySmall)
+    ElevatedCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Text("שגיאה", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.error)
+            Spacer(Modifier.height(6.dp))
+            Text(msg, style = MaterialTheme.typography.bodySmall)
+        }
     }
-  }
 }
 
 @Composable
 private fun PlaceholderCard() {
-  ElevatedCard(Modifier.fillMaxWidth()) {
-    Column(Modifier.padding(16.dp)) {
-      Text("בחר עיר ולוח כדי להציג זמנים", style = MaterialTheme.typography.titleMedium)
-      Text("השתמש בכפתורי היום/אחורה/קדימה למעבר בין ימים.", style = MaterialTheme.typography.bodySmall)
+    ElevatedCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Text("בחר עיר ולוח כדי להציג זמנים", style = MaterialTheme.typography.titleMedium)
+            Text("השתמש בכפתורי היום/אחורה/קדימה למעבר בין ימים.", style = MaterialTheme.typography.bodySmall)
+        }
     }
-  }
 }
